@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Image Caption Demo</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; }
+      .card { max-width: 560px; border: 1px solid #ddd; border-radius: 8px; padding: 16px; }
+      .row { margin-bottom: 12px; }
+      #preview { max-width: 100%; margin-top: 8px; display: none; border-radius: 6px; }
+      button { padding: 8px 14px; border: 0; background: #0b5ed7; color: #fff; border-radius: 6px; cursor: pointer; }
+      button:disabled { background: #8cb3f2; cursor: not-allowed; }
+      .muted { color: #666; font-size: 0.9rem; }
+      #result { white-space: pre-wrap; margin-top: 12px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2>Image Caption Demo</h2>
+      <p class="muted">Upload an image and get a short description.</p>
+      <div class="row">
+        <input id="file" type="file" accept="image/*" />
+        <img id="preview" alt="preview" />
+      </div>
+      <div class="row">
+        <button id="send" disabled>Generate Caption</button>
+      </div>
+      <div id="result" class="row"></div>
+    </div>
+
+    <script>
+      const fileEl = document.getElementById('file');
+      const previewEl = document.getElementById('preview');
+      const sendBtn = document.getElementById('send');
+      const resultEl = document.getElementById('result');
+
+      fileEl.addEventListener('change', () => {
+        const f = fileEl.files && fileEl.files[0];
+        resultEl.textContent = '';
+        if (!f) { previewEl.style.display = 'none'; sendBtn.disabled = true; return; }
+        const reader = new FileReader();
+        reader.onload = e => {
+          previewEl.src = e.target.result;
+          previewEl.style.display = 'block';
+        };
+        reader.readAsDataURL(f);
+        sendBtn.disabled = false;
+      });
+
+      sendBtn.addEventListener('click', async () => {
+        const f = fileEl.files && fileEl.files[0];
+        if (!f) return;
+        sendBtn.disabled = true;
+        resultEl.textContent = 'Uploading...';
+        try {
+          const form = new FormData();
+          form.append('image', f, f.name || 'image.jpg');
+          const resp = await fetch('/api/describe', { method: 'POST', body: form });
+          const json = await resp.json();
+          if (!resp.ok) {
+            resultEl.textContent = 'Error: ' + (json.error || resp.statusText);
+          } else {
+            resultEl.textContent = json.description || JSON.stringify(json);
+          }
+        } catch (e) {
+          resultEl.textContent = 'Network error: ' + e.message;
+        } finally {
+          sendBtn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+  </html>
