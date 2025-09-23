@@ -138,17 +138,22 @@ Image_processing_uni_project/
 
 ### Environment Variables
 
-You can customize the application behavior using environment variables:
+To use the vLLM platform, you must configure the vLLM model and related settings in the .env file. Create a .env file in the project root and add the following variables:
 
 ```bash
-# vLLM Configuration (optional)
-export VLLM_BASE_URL="http://127.0.0.1:8000/v1"
-export VLLM_MODEL="Qwen/Qwen2-VL-2B-Instruct"
-export VLLM_API_KEY="EMPTY"
+# vLLM Configuration
+HUGGING_FACE_HUB_TOKEN=your_hugging_face_token
+VLLM_BASE_URL=your_server_ip_or_url
+VLLM_API_KEY=your_vllm_api_key
+VLLM_MODEL=Qwen/Qwen2-VL-2B-Instruct
 
-# Django Configuration
-export DJANGO_SETTINGS_MODULE="visionapp.settings"
+# Judge Configuration (if applicable)
+JUDGE_BASE_URL=your_judge_server_ip_or_url
+JUDGE_API_KEY=your_judge_api_key
+JUDGE_MODEL=your_judge_model
+
 ```
+Replace your_hugging_face_token, your_server_ip_or_url, your_vllm_api_key, your_judge_server_ip_or_url, your_judge_api_key, and your_judge_model with the appropriate values for your setup. The HUGGING_FACE_HUB_TOKEN is required for accessing models from Hugging Face, and VLLM_MODEL specifies the model to use with vLLM (e.g., Qwen/Qwen2-VL-2B-Instruct).
 
 ### vLLM Server (Optional)
 
