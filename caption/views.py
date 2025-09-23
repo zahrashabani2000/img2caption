@@ -9,6 +9,10 @@ import os
 import threading
 import json
 from dotenv import load_dotenv
+import logging
+import httpx
+import re
+import time
 
 # Load environment variables from .env file
 load_dotenv()
@@ -92,22 +96,76 @@ def _generate_image_with_sd(prompt: str) -> Image.Image:
     return result.images[0]
 
 
-def _judge_with_external_api(b64_image: str, description: str) -> dict:
+logger = logging.getLogger(__name__)
+
+
+def _judge_with_external_api(b64_image: str, description: str, max_retries: int = 3, retry_delay: float = 1.0) -> dict:
+    # Check environment variables
+    if not JUDGE_BASE_URL or not JUDGE_API_KEY:
+        logger.error("Missing JUDGE_BASE_URL or JUDGE_API_KEY environment variables")
+        return {
+            "score": "Not provided",
+            "explanation": "Missing JUDGE_BASE_URL or JUDGE_API_KEY environment variables",
+            "source": "none"
+        }
+
     session_payload = {"model": "judge"}
     headers = {"Authorization": f"Bearer {JUDGE_API_KEY}", "Content-Type": "application/json"}
-    try:
-        with httpx.Client(base_url=JUDGE_BASE_URL, timeout=60) as client:
-            session_resp = client.post("/judge/chat/Judge.v3/create_session/", json=session_payload, headers=headers)
-            if session_resp.status_code == 200:
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            with httpx.Client(base_url=JUDGE_BASE_URL, timeout=60) as client:
+                session_resp = client.post("/judge/chat/Judge.v3/create_session/", json=session_payload,
+                                           headers=headers)
+                if session_resp.status_code != 200:
+                    logger.error(
+                        f"Attempt {attempt}: Failed to create session: {session_resp.status_code} - {session_resp.text}")
+                    return {
+                        "score": "Not provided",
+                        "explanation": f"Failed to create session: {session_resp.status_code} - {session_resp.text}",
+                        "source": "none"
+                    }
                 session_id = session_resp.json().get("session_id")
-                prompt = f"Judge the quality of this image description on a scale of 1-10: {description}. Image: data:image/jpeg;base64,{b64_image}"
+                if not session_id:
+                    logger.error(f"Attempt {attempt}: No session_id in API response")
+                    return {
+                        "score": "Not provided",
+                        "explanation": "No session_id provided by API",
+                        "source": "none"
+                    }
+                prompt = f"Judge the quality of this image description on a scale of 1-10, providing a numerical score and a brief explanation: {description}. Image: data:image/jpeg;base64,{b64_image}"
                 payload = {"content": prompt}
-                resp = client.post(f"/judge/chat/Judge.v3/answer_chat/?session_id={session_id}", json=payload, headers=headers)
-                if resp.status_code == 200:
-                    return {"judgment": resp.json().get("content", "No judgment"), "source": "judge-api"}
-    except Exception:
-        pass
-    return {"judgment": "Unable to judge", "source": "none"}
+                resp = client.post(f"/judge/chat/Judge.v3/answer_chat/?session_id={session_id}", json=payload,
+                                   headers=headers)
+                if resp.status_code != 200:
+                    logger.error(f"Attempt {attempt}: Failed to get judgment: {resp.status_code} - {resp.text}")
+                    if attempt < max_retries and resp.status_code == 500:
+                        time.sleep(retry_delay)
+                        continue
+                    return {
+                        "score": "Not provided",
+                        "explanation": f"Failed to get judgment after {attempt} attempts: {resp.status_code} - {resp.text}",
+                        "source": "none"
+                    }
+                content = resp.json().get("content", "No judgment")
+                score_match = re.search(r'\b([1-9]|10)\b', content)
+                score = int(score_match.group(0)) if score_match else None
+                explanation = content if score_match else "No clear score provided in judgment."
+                return {
+                    "score": score if score is not None else "Not provided",
+                    "explanation": explanation,
+                    "source": "judge-api"
+                }
+        except Exception as e:
+            logger.error(f"Attempt {attempt}: Error in _judge_with_external_api: {str(e)}")
+            if attempt < max_retries:
+                time.sleep(retry_delay)
+                continue
+            return {
+                "score": "Not provided",
+                "explanation": f"Unable to judge after {max_retries} attempts due to error: {str(e)}",
+                "source": "none"
+            }
 
 @csrf_exempt
 def describe_image(request):
@@ -163,12 +221,12 @@ def describe_image(request):
             return JsonResponse({"error": str(e)}, status=500)
 
     # Now judge the description with external API
-    judgment = _judge_with_external_api(b64_image, description)
+    # judgment = _judge_with_external_api(b64_image, description)
 
     return JsonResponse({
         "description": description,
         "description_source": source,
-        **judgment
+        # **judgment
     })
 
 
