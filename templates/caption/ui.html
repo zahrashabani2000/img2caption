@@ -1,150 +1,71 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>AI Image Tools</title>
+<head>
+    <meta charset="UTF-8">
+    <title>Image Describe Chat</title>
     <style>
-      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; }
-      .card { max-width: 600px; border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
-      .row { margin-bottom: 12px; }
-      #preview, #generated { max-width: 100%; margin-top: 8px; display: none; border-radius: 6px; }
-      button { padding: 8px 14px; border: 0; background: #0b5ed7; color: #fff; border-radius: 6px; cursor: pointer; margin-right: 8px; }
-      button:disabled { background: #8cb3f2; cursor: not-allowed; }
-      .muted { color: #666; font-size: 0.9rem; }
-      #result, #gen-result { white-space: pre-wrap; margin-top: 12px; }
-      textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; resize: vertical; }
-      .tabs { display: flex; margin-bottom: 16px; }
-      .tab { padding: 8px 16px; background: #f8f9fa; border: 1px solid #ddd; cursor: pointer; border-radius: 4px 4px 0 0; }
-      .tab.active { background: #fff; border-bottom: 1px solid #fff; }
-      .tab-content { display: none; }
-      .tab-content.active { display: block; }
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        input, textarea { width: 100%; padding: 8px; margin: 5px 0; }
+        button { padding: 10px 15px; margin-top: 10px; }
+        img { max-width: 300px; margin-top: 10px; }
+        .result { margin-top: 20px; padding: 10px; border: 1px solid #ccc; }
     </style>
-  </head>
-  <body>
-    <div class="card">
-      <h2>AI Image Tools</h2>
-      <p class="muted">Generate images from text or describe uploaded images.</p>
-      
-      <div class="tabs">
-        <div class="tab active" onclick="switchTab('caption')">Image Caption</div>
-        <div class="tab" onclick="switchTab('generate')">Generate Image</div>
-      </div>
+</head>
+<body>
+    <h1>Image Describe Chat</h1>
 
-      <!-- Caption Tab -->
-      <div id="caption-tab" class="tab-content active">
-        <p class="muted">Upload an image and get a short description.</p>
-        <div class="row">
-          <input id="file" type="file" accept="image/*" />
-          <img id="preview" alt="preview" />
-        </div>
-        <div class="row">
-          <button id="send" disabled>Generate Caption</button>
-        </div>
-        <div id="result" class="row"></div>
-      </div>
+    <form id="describeForm">
+        <label for="prompt">Text Prompt (optional):</label>
+        <textarea id="prompt" rows="3"></textarea>
 
-      <!-- Generate Tab -->
-      <div id="generate-tab" class="tab-content">
-        <p class="muted">Describe what you want to generate.</p>
-        <div class="row">
-          <textarea id="prompt" placeholder="A beautiful sunset over mountains..." rows="3"></textarea>
-        </div>
-        <div class="row">
-          <button id="generate-btn">Generate Image</button>
-        </div>
-        <div class="row">
-          <img id="generated" alt="generated image" />
-        </div>
-        <div id="gen-result" class="row"></div>
-      </div>
-    </div>
+        <label for="image">Upload Image (optional):</label>
+        <input type="file" id="image" accept="image/*">
+
+        <button type="submit">Send</button>
+    </form>
+
+    <div class="result" id="result"></div>
 
     <script>
-      // Tab switching
-      function switchTab(tabName) {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-        document.querySelector(`[onclick="switchTab('${tabName}')"]`).classList.add('active');
-        document.getElementById(`${tabName}-tab`).classList.add('active');
-      }
+        const form = document.getElementById("describeForm");
+        const resultDiv = document.getElementById("result");
 
-      // Caption functionality
-      const fileEl = document.getElementById('file');
-      const previewEl = document.getElementById('preview');
-      const sendBtn = document.getElementById('send');
-      const resultEl = document.getElementById('result');
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            resultDiv.innerHTML = "Processing...";
 
-      fileEl.addEventListener('change', () => {
-        const f = fileEl.files && fileEl.files[0];
-        resultEl.textContent = '';
-        if (!f) { previewEl.style.display = 'none'; sendBtn.disabled = true; return; }
-        const reader = new FileReader();
-        reader.onload = e => {
-          previewEl.src = e.target.result;
-          previewEl.style.display = 'block';
-        };
-        reader.readAsDataURL(f);
-        sendBtn.disabled = false;
-      });
+            const prompt = document.getElementById("prompt").value.trim();
+            const imageFile = document.getElementById("image").files[0];
 
-      sendBtn.addEventListener('click', async () => {
-        const f = fileEl.files && fileEl.files[0];
-        if (!f) return;
-        sendBtn.disabled = true;
-        resultEl.textContent = 'Uploading...';
-        try {
-          const form = new FormData();
-          form.append('image', f, f.name || 'image.jpg');
-          const resp = await fetch('/api/describe', { method: 'POST', body: form });
-          const json = await resp.json();
-          if (!resp.ok) {
-            resultEl.textContent = 'Error: ' + (json.error || resp.statusText);
-          } else {
-            resultEl.textContent = json.description || JSON.stringify(json);
-          }
-        } catch (e) {
-          resultEl.textContent = 'Network error: ' + e.message;
-        } finally {
-          sendBtn.disabled = false;
-        }
-      });
+            const formData = new FormData();
+            if (prompt) formData.append("prompt", prompt);
+            if (imageFile) formData.append("image", imageFile);
 
-      // Generate functionality
-      const promptEl = document.getElementById('prompt');
-      const generateBtn = document.getElementById('generate-btn');
-      const generatedEl = document.getElementById('generated');
-      const genResultEl = document.getElementById('gen-result');
+            try {
+                const response = await fetch("/api/describe", {
+                    method: "POST",
+                    body: formData
+                });
 
-      generateBtn.addEventListener('click', async () => {
-        const prompt = promptEl.value.trim();
-        if (!prompt) return;
-        
-        generateBtn.disabled = true;
-        genResultEl.textContent = 'Generating image...';
-        generatedEl.style.display = 'none';
-        
-        try {
-          const resp = await fetch('/api/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt })
-          });
-          const json = await resp.json();
-          
-          if (!resp.ok) {
-            genResultEl.textContent = 'Error: ' + (json.error || resp.statusText);
-          } else {
-            generatedEl.src = json.image;
-            generatedEl.style.display = 'block';
-            genResultEl.textContent = `Generated: "${json.prompt}"`;
-          }
-        } catch (e) {
-          genResultEl.textContent = 'Network error: ' + e.message;
-        } finally {
-          generateBtn.disabled = false;
-        }
-      });
+                const data = await response.json();
+
+                if (response.ok) {
+                    let html = "";
+                    if (data.image) {
+                        html += `<img src="${data.image}" alt="Uploaded Image"><br>`;
+                    }
+                    if (data.blip_caption) {
+                        html += `<strong>BLIP Caption:</strong> ${data.blip_caption}<br>`;
+                    }
+                    html += `<strong>RHINO Response:</strong> ${data.description}<br>`;
+                    resultDiv.innerHTML = html;
+                } else {
+                    resultDiv.innerHTML = `<span style="color:red">Error: ${data.error}</span>`;
+                }
+            } catch (err) {
+                resultDiv.innerHTML = `<span style="color:red">Error: ${err.message}</span>`;
+            }
+        });
     </script>
-  </body>
-  </html>
+</body>
+</html>
