@@ -2,6 +2,16 @@
 
 A Django web application that provides AI-powered image processing capabilities including image captioning and text-to-image generation. Built for Computer Engineering Bachelor's degree project using vLLM platform and CPU-compatible models.
 
+## 🚀 Quick Docker Setup
+
+Rename `.env.example` to `.env` and provide model server variables.
+
+Run with Docker:
+```bash
+docker-compose up -d
+```
+Access at: http://localhost:8000/api/ui
+
 ## Features
 
 - **Image Captioning**: Upload an image and get an AI-generated description
@@ -32,7 +42,7 @@ cd img2caption
 #### 2. Create Environment File
 
 ```bash
-cp .env-sample .env
+cp .env.example .env
 # Edit .env with your configuration
 ```
 
@@ -51,8 +61,8 @@ docker-compose logs -f
 
 #### 4. Access the Application
 
-- **Frontend**: `http://localhost:9000/api/ui`
-- **API**: `http://localhost:9000/api/describe`
+- **Frontend**: `http://localhost:8000/api/ui`
+- **API**: `http://localhost:8000/api/describe`
 
 ### Option 2: Local Development
 
@@ -86,12 +96,12 @@ python manage.py migrate
 #### 5. Start the Development Server
 
 ```bash
-python manage.py runserver 0.0.0.0:9000
+python manage.py runserver 0.0.0.0:8000
 ```
 
 #### 6. Access the Application
 
-Open your browser and go to: `http://localhost:9000/api/ui`
+Open your browser and go to: `http://localhost:8000/api/ui`
 
 ## Usage
 
@@ -113,7 +123,7 @@ Open your browser and go to: `http://localhost:9000/api/ui`
 
 #### Image Captioning
 ```bash
-curl -X POST -F image=@your_image.jpg http://localhost:9000/api/describe
+curl -X POST -F image=@your_image.jpg http://localhost:8000/api/describe
 ```
 
 Response:
@@ -128,7 +138,7 @@ Response:
 ```bash
 curl -X POST -H "Content-Type: application/json" \
   -d '{"prompt": "A cat sitting on a windowsill"}' \
-  http://localhost:9000/api/generate
+  http://localhost:8000/api/generate
 ```
 
 Response:
@@ -184,13 +194,10 @@ VLLM_BASE_URL=your_server_ip_or_url
 VLLM_API_KEY=your_vllm_api_key
 VLLM_MODEL=Qwen/Qwen2-VL-2B-Instruct
 
-# Judge Configuration (if applicable)
-JUDGE_BASE_URL=your_judge_server_ip_or_url
-JUDGE_API_KEY=your_judge_api_key
-JUDGE_MODEL=your_judge_model
+
 
 ```
-Replace your_hugging_face_token, your_server_ip_or_url, your_vllm_api_key, your_judge_server_ip_or_url, your_judge_api_key, and your_judge_model with the appropriate values for your setup. The HUGGING_FACE_HUB_TOKEN is required for accessing models from Hugging Face, and VLLM_MODEL specifies the model to use with vLLM (e.g., Qwen/Qwen2-VL-2B-Instruct).
+Replace your_hugging_face_token, your_server_ip_or_url, your_vllm_api_key, your_rhino_server_ip_or_url, your_rhino_api_key, and your_rhino_model with the appropriate values for your setup. The HUGGING_FACE_HUB_TOKEN is required for accessing models from Hugging Face, and VLLM_MODEL specifies the model to use with vLLM (e.g., Qwen/Qwen2-VL-2B-Instruct).
 
 ### vLLM Server (Optional)
 
@@ -272,9 +279,9 @@ docker-compose exec web python manage.py collectstatic
 
 The application uses the following Docker configuration:
 
-- **Base Image**: Python 3.12-slim
-- **Port**: 9000 (mapped to host port 9000)
-- **Volume Mounts**: Project directory for development
+- **Base Image**: Python 3.11-slim
+- **Port**: 8000 (mapped to host port 8000)
+- **Volume Mounts**: Database and static files for persistence
 - **Environment**: Supports .env file for configuration
 - **Health Check**: Monitors application availability
 
@@ -323,8 +330,8 @@ docker-compose up -d
 python manage.py test
 
 # Test API endpoints
-curl -X POST -F image=@test_image.jpg http://localhost:9000/api/describe
-curl -X POST -H "Content-Type: application/json" -d '{"prompt":"test"}' http://localhost:9000/api/generate
+curl -X POST -F image=@test_image.jpg http://localhost:8000/api/describe
+curl -X POST -H "Content-Type: application/json" -d '{"prompt":"test"}' http://localhost:8000/api/generate
 
 # Test with Docker
 docker-compose exec web python manage.py test

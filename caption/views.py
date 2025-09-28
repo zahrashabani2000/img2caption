@@ -16,8 +16,11 @@ load_dotenv()
 
 _blip_lock = threading.Lock()
 _blip_loaded = False
-_blip_processor = None
-_blip_model = None
+_blip_pipeline = None
+
+
+_sd_loaded = False
+_sd_pipeline = None
 
 # Environment variables
 VLLM_BASE_URL = os.environ.get("VLLM_BASE_URL")
@@ -27,31 +30,64 @@ VLLM_MODEL = os.environ.get("VLLM_MODEL")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load BLIP
+# Load fast image captioning model
 def _load_blip_if_needed():
-    global _blip_loaded, _blip_processor, _blip_model
+    global _blip_loaded, _blip_pipeline
     if _blip_loaded:
         return
     with _blip_lock:
         if _blip_loaded:
             return
-        from transformers import BlipProcessor, BlipForConditionalGeneration
-        _blip_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-        _blip_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
-        _blip_model.eval()
-        _blip_loaded = True
+        try:
+            from transformers import pipeline
+            import torch
+
+            # Use BLIP with maximum optimizations for speed
+            logger.info("Loading optimized BLIP image-to-text pipeline...")
+            _blip_pipeline = pipeline(
+                "image-to-text",
+                model="Salesforce/blip-image-captioning-base",
+                device="cpu",
+                torch_dtype=torch.float32,
+                max_new_tokens=6,  # Very short captions for speed
+                min_length=3,  # Minimum length
+                num_beams=1,  # Greedy decoding
+                do_sample=False,
+                use_fast=True,
+                model_kwargs={
+                    "torch_dtype": torch.float32,
+                    "low_cpu_mem_usage": True,
+                    "device_map": None
+                },
+                tokenizer_kwargs={"use_fast": True}
+            )
+            _blip_loaded = True
+            logger.info("Fast image captioning pipeline loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load image captioning pipeline: {e}")
+            _blip_loaded = False
+            _blip_pipeline = None
 
 def _caption_with_blip(pil_image: Image.Image) -> str:
     _load_blip_if_needed()
-    inputs = _blip_processor(images=pil_image, return_tensors="pt")
-    import torch
-    with torch.no_grad():
-        out = _blip_model.generate(**inputs, max_new_tokens=30)
-    text = _blip_processor.decode(out[0], skip_special_tokens=True)
-    return text
+    if not _blip_loaded or _blip_pipeline is None:
+        return "Error: Model not loaded"
 
-# Send text to judge model
-def _send_to_judge(text: str) -> str:
+    try:
+        # Use the pipeline for fast inference
+        result = _blip_pipeline(pil_image)
+        caption = result[0]['generated_text'] if result else "No caption generated"
+        return caption
+    except Exception as e:
+        logger.error(f"Error generating caption: {e}")
+        return f"Error generating caption: {str(e)}"
+
+def _send_to_rhino(text: str) -> str:
+    # Check if VLLM is properly configured
+    if not all([VLLM_BASE_URL, VLLM_API_KEY, VLLM_MODEL]):
+        logger.warning("VLLM not configured, returning BLIP caption only")
+        return None
+
     payload = {
         "model": VLLM_MODEL,
         "messages": [
@@ -65,64 +101,73 @@ def _send_to_judge(text: str) -> str:
     }
     headers = {"Authorization": f"Bearer {VLLM_API_KEY}", "Content-Type": "application/json"}
 
-    with httpx.Client(base_url=VLLM_BASE_URL, timeout=60) as client:
-        resp = client.post("/chat/completions", json=payload, headers=headers)
-    if resp.status_code != 200:
-        logger.error(f"Judge API error: {resp.status_code} - {resp.text}")
-        return "Error: Unable to get response from judge model"
+    try:
+        with httpx.Client(base_url=VLLM_BASE_URL, timeout=60) as client:  # Reduced timeout from 60 to 30
+            resp = client.post("/chat/completions", json=payload, headers=headers)
+        if resp.status_code != 200:
+            logger.error(f"Rhino API error: {resp.status_code} - {resp.text}")
+            return "Error: Unable to get response from rhino model"
 
-    data_resp = resp.json()
-    description = (
-        data_resp.get("choices", [{}])[0]
-        .get("message", {})
-        .get("content", "No response")
-    )
-    return description
+        data_resp = resp.json()
+        description = (
+            data_resp.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "No response")
+        )
+        return description
+    except Exception as e:
+        logger.error(f"Error calling VLLM API: {e}")
+        return f"Error calling VLLM API: {e}"
 
 @csrf_exempt
 def describe_image(request):
     if request.method != "POST":
         return JsonResponse({"error": "Use POST"}, status=405)
 
-    image_file = request.FILES.get("image")
-    prompt = request.POST.get("prompt", "").strip()
+    try:
+        image_file = request.FILES.get("image")
+        prompt = request.POST.get("prompt", "").strip()
 
-    b64_image = None
-    blip_caption = None
+        b64_image = None
+        blip_caption = None
 
-    # Generate BLIP caption if image is provided
-    if image_file:
-        try:
-            image = Image.open(image_file).convert("RGB")
-            buffer = io.BytesIO()
-            image.save(buffer, format="JPEG")
-            b64_image = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        # Generate BLIP caption if image is provided
+        if image_file:
+            try:
+                image = Image.open(image_file).convert("RGB")
+                buffer = io.BytesIO()
+                image.save(buffer, format="JPEG")
+                b64_image = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
-            blip_caption = _caption_with_blip(image)
-        except Exception as e:
-            return JsonResponse({"error": f"Invalid image: {str(e)}"}, status=400)
+                blip_caption = _caption_with_blip(image)
+            except Exception as e:
+                return JsonResponse({"error": f"Invalid image: {str(e)}"}, status=400)
 
-    # Build final text to send
-    final_text = ""
-    if prompt and blip_caption:
-        final_text = f"{prompt}\n\nImage description (from BLIP): {blip_caption}"
-    elif prompt:
-        final_text = prompt
-    elif blip_caption:
-        final_text = blip_caption
-    else:
-        return JsonResponse({"error": "Missing prompt or image"}, status=400)
+        # Build final text to send
+        final_text = ""
+        if prompt and blip_caption:
+            final_text = f"{prompt}\n\nImage description (from BLIP): {blip_caption}"
+        elif prompt:
+            final_text = prompt
+        elif blip_caption:
+            final_text = blip_caption
+        else:
+            return JsonResponse({"error": "Missing prompt or image"}, status=400)
 
-    # Send to judge only if there is text to analyze
-    judge_response = _send_to_judge(final_text) if final_text else None
+        rhino_response = _send_to_rhino(final_text) if final_text else None
 
-    return JsonResponse({
-        "description": judge_response,
-        "blip_caption": blip_caption,
-        "prompt": prompt,
-        "image": f"data:image/jpeg;base64,{b64_image}" if b64_image else None,
-        "description_source": "judge" if judge_response else "blip"
-    })
+        description = rhino_response if rhino_response is not None else blip_caption
+
+        return JsonResponse({
+            "description": description,
+            "blip_caption": blip_caption,
+            "prompt": prompt,
+            "image": f"data:image/jpeg;base64,{b64_image}" if b64_image else None,
+            "description_source": "rhino" if rhino_response else "blip"
+        })
+    except Exception as e:
+        logger.error(f"Unexpected error in describe_image: {e}")
+        return JsonResponse({"error": f"Internal server error: {str(e)}"}, status=500)
 
 def ui(request):
     return render(request, "caption/ui.html")
