@@ -20,39 +20,76 @@ A Django web application that provides AI-powered image processing capabilities 
 
 ## Quick Start
 
-### 1. Clone the Repository
+### Option 1: Docker Deployment (Recommended)
+
+#### 1. Clone the Repository
 
 ```bash
 git clone <https://github.com/zahrashabani2000/img2caption.git>
+cd img2caption
 ```
 
-### 2. Create Virtual Environment
+#### 2. Create Environment File
+
+```bash
+cp .env-sample .env
+# Edit .env with your configuration
+```
+
+#### 3. Build and Run with Docker
+
+```bash
+# Build the Docker image
+docker-compose build
+
+# Start the application
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+```
+
+#### 4. Access the Application
+
+- **Frontend**: `http://localhost:9000/api/ui`
+- **API**: `http://localhost:9000/api/describe`
+
+### Option 2: Local Development
+
+#### 1. Clone the Repository
+
+```bash
+git clone <https://github.com/zahrashabani2000/img2caption.git>
+cd img2caption
+```
+
+#### 2. Create Virtual Environment
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-### 3. Install Dependencies
+#### 3. Install Dependencies
 
 ```bash
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 4. Run Database Migrations
+#### 4. Run Database Migrations
 
 ```bash
 python manage.py migrate
 ```
 
-### 5. Start the Development Server
+#### 5. Start the Development Server
 
 ```bash
 python manage.py runserver 0.0.0.0:9000
 ```
 
-### 6. Access the Application
+#### 6. Access the Application
 
 Open your browser and go to: `http://localhost:9000/api/ui`
 
@@ -201,6 +238,76 @@ docker run -d --name vllm-openai-cpu \
 - Use smaller images for faster processing
 - Consider running on a machine with more RAM for better performance
 
+## Docker Deployment
+
+### Prerequisites
+
+- Docker Engine 20.10+
+- Docker Compose 2.0+
+
+### Quick Docker Commands
+
+```bash
+# Build and start the application
+docker-compose up --build -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the application
+docker-compose down
+
+# Rebuild after code changes
+docker-compose up --build
+
+# Access container shell
+docker-compose exec web bash
+
+# Run Django commands
+docker-compose exec web python manage.py migrate
+docker-compose exec web python manage.py collectstatic
+```
+
+### Docker Configuration
+
+The application uses the following Docker configuration:
+
+- **Base Image**: Python 3.12-slim
+- **Port**: 9000 (mapped to host port 9000)
+- **Volume Mounts**: Project directory for development
+- **Environment**: Supports .env file for configuration
+- **Health Check**: Monitors application availability
+
+### Production Deployment
+
+For production deployment, consider:
+
+1. **Environment Variables**: Set `DEBUG=False` and configure proper `SECRET_KEY`
+2. **Static Files**: Use a reverse proxy (nginx) to serve static files
+3. **Database**: Use PostgreSQL or MySQL instead of SQLite
+4. **Security**: Configure proper `ALLOWED_HOSTS` and use HTTPS
+
+### Troubleshooting Docker
+
+```bash
+# Check container status
+docker-compose ps
+
+# View detailed logs
+docker-compose logs web
+
+# Restart the service
+docker-compose restart web
+
+# Clean up (removes containers, networks, volumes)
+docker-compose down -v
+
+# Rebuild from scratch
+docker-compose down -v
+docker-compose build --no-cache
+docker-compose up -d
+```
+
 ## Development
 
 ### Adding New Features
@@ -218,6 +325,9 @@ python manage.py test
 # Test API endpoints
 curl -X POST -F image=@test_image.jpg http://localhost:9000/api/describe
 curl -X POST -H "Content-Type: application/json" -d '{"prompt":"test"}' http://localhost:9000/api/generate
+
+# Test with Docker
+docker-compose exec web python manage.py test
 ```
 
 ## License
