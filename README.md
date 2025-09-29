@@ -155,7 +155,7 @@ Response:
 ### Models Used
 
 1. **Image Captioning**:
-   - Primary: vLLM with Qwen2-VL-2B-Instruct (if available)
+   - Primary: vLLM with rhino(if available)
    - Fallback: BLIP (Salesforce/blip-image-captioning-base)
 
 2. **Image Generation**:
@@ -192,12 +192,12 @@ To use the vLLM platform, you must configure the vLLM model and related settings
 HUGGING_FACE_HUB_TOKEN=your_hugging_face_token
 VLLM_BASE_URL=your_server_ip_or_url
 VLLM_API_KEY=your_vllm_api_key
-VLLM_MODEL=Qwen/Qwen2-VL-2B-Instruct
+VLLM_MODEL=rhino
 
 
 
 ```
-Replace your_hugging_face_token, your_server_ip_or_url, your_vllm_api_key, your_rhino_server_ip_or_url, your_rhino_api_key, and your_rhino_model with the appropriate values for your setup. The HUGGING_FACE_HUB_TOKEN is required for accessing models from Hugging Face, and VLLM_MODEL specifies the model to use with vLLM (e.g., Qwen/Qwen2-VL-2B-Instruct).
+Replace your_hugging_face_token, your_server_ip_or_url, your_vllm_api_key, your_rhino_server_ip_or_url, your_rhino_api_key, and your_rhino_model with the appropriate values for your setup. The HUGGING_FACE_HUB_TOKEN is required for accessing models from Hugging Face, and VLLM_MODEL specifies the model to use with vLLM (e.g., rhino).
 
 ### vLLM Server (Optional)
 
