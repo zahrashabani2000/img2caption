@@ -15,163 +15,138 @@ import logging
 load_dotenv()
 
 _blip_lock = threading.Lock()
-_blip_loaded = False
-_blip_pipeline = None
 
 
 _sd_loaded = False
 _sd_pipeline = None
 
-# Environment variables
-VLLM_BASE_URL = os.environ.get("VLLM_BASE_URL")
-VLLM_API_KEY = os.environ.get("VLLM_API_KEY")
-VLLM_MODEL = os.environ.get("VLLM_MODEL")
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load fast image captioning model
-def _load_blip_if_needed():
-    global _blip_loaded, _blip_pipeline
-    if _blip_loaded:
-        return
-    with _blip_lock:
-        if _blip_loaded:
-            return
-        try:
-            from transformers import pipeline
-            import torch
+# Rhino Light API configuration (defaults match provided curl)
+RHINO_LIGHT_BASE_URL = os.environ.get("RHINO_LIGHT_BASE_URL", "https://rhino-light-api.ssl.qom.ac.ir")
+RHINO_LIGHT_KEY = os.environ.get("RHINO_LIGHT_KEY", "default")
+RHINO_LIGHT_MODEL = os.environ.get("RHINO_LIGHT_MODEL", "rhino")
+RHINO_MAX_IMAGE_SIDE = int(os.environ.get("RHINO_MAX_IMAGE_SIDE", "1024"))
+RHINO_JPEG_QUALITY = int(os.environ.get("RHINO_JPEG_QUALITY", "80"))
 
-            # Use BLIP with maximum optimizations for speed
-            logger.info("Loading optimized BLIP image-to-text pipeline...")
-            _blip_pipeline = pipeline(
-                "image-to-text",
-                model="Salesforce/blip-image-captioning-base",
-                device="cpu",
-                torch_dtype=torch.float32,
-                max_new_tokens=6,  # Very short captions for speed
-                min_length=3,  # Minimum length
-                num_beams=1,  # Greedy decoding
-                do_sample=False,
-                use_fast=True,
-                model_kwargs={
-                    "torch_dtype": torch.float32,
-                    "low_cpu_mem_usage": True,
-                    "device_map": None
-                },
-                tokenizer_kwargs={"use_fast": True}
-            )
-            _blip_loaded = True
-            logger.info("Fast image captioning pipeline loaded successfully")
-        except Exception as e:
-            logger.error(f"Failed to load image captioning pipeline: {e}")
-            _blip_loaded = False
-            _blip_pipeline = None
-
-def _caption_with_blip(pil_image: Image.Image) -> str:
-    _load_blip_if_needed()
-    if not _blip_loaded or _blip_pipeline is None:
-        return "Error: Model not loaded"
-
-    try:
-        # Use the pipeline for fast inference
-        result = _blip_pipeline(pil_image)
-        caption = result[0]['generated_text'] if result else "No caption generated"
-        return caption
-    except Exception as e:
-        logger.error(f"Error generating caption: {e}")
-        return f"Error generating caption: {str(e)}"
-
-def _send_to_rhino(text: str) -> str:
-    # Check if VLLM is properly configured
-    if not all([VLLM_BASE_URL, VLLM_API_KEY, VLLM_MODEL]):
-        logger.warning("VLLM not configured, returning BLIP caption only")
-        return None
-
+def _call_rhino_light(messages: list, temperature: float = 0.8, top_p: float = 0.95, max_tokens: int = 200, model: str = None) -> dict:
     payload = {
-        "model": VLLM_MODEL,
-        "messages": [
-            {
-                "role": "user",
-                "content": f"{text}"
-            }
-        ],
-        "max_tokens": 256,
-        "temperature": 0.2,
+        "model": model or RHINO_LIGHT_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+        "top_p": top_p,
+        "max_tokens": max_tokens,
     }
-    headers = {"Authorization": f"Bearer {VLLM_API_KEY}", "Content-Type": "application/json"}
-
-    try:
-        with httpx.Client(base_url=VLLM_BASE_URL, timeout=60) as client:  # Reduced timeout from 60 to 30
-            resp = client.post("/chat/completions", json=payload, headers=headers)
-        if resp.status_code != 200:
-            logger.error(f"Rhino API error: {resp.status_code} - {resp.text}")
-            return "Error: Unable to get response from rhino model"
-
-        data_resp = resp.json()
-        description = (
-            data_resp.get("choices", [{}])[0]
-            .get("message", {})
-            .get("content", "No response")
-        )
-        return description
-    except Exception as e:
-        logger.error(f"Error calling VLLM API: {e}")
-        return f"Error calling VLLM API: {e}"
+    headers = {
+        "Authorization": f"Bearer {RHINO_LIGHT_KEY}",
+        "Content-Type": "application/json",
+    }
+    with httpx.Client(timeout=60) as client:
+        resp = client.post(f"{RHINO_LIGHT_BASE_URL}/v1/chat/completions", json=payload, headers=headers)
+    return {"status": resp.status_code, "data": (resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {"text": resp.text})}
 
 @csrf_exempt
-def describe_image(request):
+def chat(request):
     if request.method != "POST":
         return JsonResponse({"error": "Use POST"}, status=405)
 
     try:
-        image_file = request.FILES.get("image")
-        prompt = request.POST.get("prompt", "").strip()
+        # Support multipart form (message + image)
+        message = ""
+        image_file = None
 
-        b64_image = None
-        blip_caption = None
-
-        # Generate BLIP caption if image is provided
-        if image_file:
+        if request.content_type and request.content_type.startswith("multipart/form-data"):
+            message = request.POST.get("message", "").strip()
+            image_file = request.FILES.get("image")
+        else:
+            # Also support JSON body: { "message": string, "image_base64": string }
             try:
-                image = Image.open(image_file).convert("RGB")
-                buffer = io.BytesIO()
-                image.save(buffer, format="JPEG")
-                b64_image = base64.b64encode(buffer.getvalue()).decode("utf-8")
+                data = json.loads(request.body.decode("utf-8")) if request.body else {}
+            except Exception:
+                data = {}
+            message = (data.get("message", "") or "").strip()
+            image_base64_json = data.get("image_base64")
+            if image_base64_json:
+                # Create a pseudo file payload from provided base64
+                image_file = None
+                image_b64_str = image_base64_json
+            else:
+                image_b64_str = None
 
-                blip_caption = _caption_with_blip(image)
+        # Prepare image base64 if file provided
+        data_url = None
+        if image_file is not None:
+            try:
+                img = Image.open(image_file).convert("RGB")
+                width, height = img.size
+                max_side = max(width, height)
+                if max_side > RHINO_MAX_IMAGE_SIDE:
+                    scale = RHINO_MAX_IMAGE_SIDE / float(max_side)
+                    new_size = (int(width * scale), int(height * scale))
+                    img = img.resize(new_size, Image.LANCZOS)
+                buffer = io.BytesIO()
+                img.save(buffer, format="JPEG", quality=RHINO_JPEG_QUALITY, optimize=True, progressive=True)
+                image_b64_str = base64.b64encode(buffer.getvalue()).decode("utf-8")
+                content_type = "image/jpeg"
+                data_url = f"data:{content_type};base64,{image_b64_str}"
             except Exception as e:
                 return JsonResponse({"error": f"Invalid image: {str(e)}"}, status=400)
-
-        # Build final text to send
-        final_text = ""
-        if prompt and blip_caption:
-            final_text = f"{prompt}\n\nImage description (from BLIP): {blip_caption}"
-        elif prompt:
-            final_text = prompt
-        elif blip_caption:
-            final_text = blip_caption
         else:
-            return JsonResponse({"error": "Missing prompt or image"}, status=400)
+            content_type = "image/jpeg"
 
-        rhino_response = _send_to_rhino(final_text) if final_text else None
+        # If neither message nor image provided, error
+        if not message and not image_file and not (locals().get("image_b64_str")):
+            return JsonResponse({"error": "Missing message or image"}, status=400)
 
-        description = rhino_response if rhino_response is not None else blip_caption
+        # Build request payload to Rhino Light API exactly like provided curl
+        content_parts = []
+        if message or not locals().get("image_b64_str"):
+            content_parts.append({
+                "type": "text",
+                "text": message or "Describe this image in detail"
+            })
+        if locals().get("image_b64_str"):
+            content_parts.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{content_type};base64,{image_b64_str}"
+                }
+            })
+
+        messages = [
+            {
+                "role": "user",
+                "content": content_parts,
+            }
+        ]
+
+        result = _call_rhino_light(messages)
+
+        if result["status"] != 200:
+            logger.error(f"Rhino Light API error: {result['status']} - {result.get('data')}")
+            return JsonResponse({"error": "Upstream model error"}, status=502)
+
+        data_resp = result["data"]
+        assistant_text = (
+            data_resp.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "No response")
+        )
 
         return JsonResponse({
-            "description": description,
-            "blip_caption": blip_caption,
-            "prompt": prompt,
-            "image": f"data:image/jpeg;base64,{b64_image}" if b64_image else None,
-            "description_source": "rhino" if rhino_response else "blip"
+            "reply": assistant_text,
+            "message": message,
+            "image": data_url,
+            "source": "rhino-light"
         })
     except Exception as e:
-        logger.error(f"Unexpected error in describe_image: {e}")
+        logger.error(f"Unexpected error in chat: {e}")
         return JsonResponse({"error": f"Internal server error: {str(e)}"}, status=500)
 
 def ui(request):
     return render(request, "caption/ui.html")
-
+#-------------------------------------------------------------------------------------------------
 def _load_sd_if_needed():
     global _sd_loaded, _sd_pipeline
     if _sd_loaded:

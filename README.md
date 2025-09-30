@@ -1,6 +1,6 @@
 # AI Image Processing University Project
 
-A Django web application that provides AI-powered image processing capabilities including image captioning and text-to-image generation. Built for Computer Engineering Bachelor's degree project using vLLM platform and CPU-compatible models.
+A Django web application that provides AI-powered image processing capabilities including image captioning, text-to-image generation, and conversational AI with vision. Built for Computer Engineering Bachelor's degree project using Rhino Light API (vLLM-based) and CPU-compatible models.
 
 ## 🚀 Quick Docker Setup
 
@@ -14,9 +14,10 @@ Access at: http://localhost:8000/api/ui
 
 ## Features
 
-- **Image Captioning**: Upload an image and get an AI-generated description
-- **Text-to-Image Generation**: Describe what you want and generate an image
-- **CPU-Optimized**: Works on CPU-only systems with fallback models
+- **Image Captioning**: Upload an image and get an AI-generated description using Rhino vision model
+- **Conversational AI with Vision**: Chat with images using natural language
+- **Text-to-Image Generation**: Describe what you want and generate an image using Stable Diffusion
+- **CPU-Optimized**: Works on CPU-only systems using efficient models
 - **Web Interface**: Simple, modern UI for easy interaction
 - **API Endpoints**: RESTful API for programmatic access
 
@@ -62,7 +63,7 @@ docker-compose logs -f
 #### 4. Access the Application
 
 - **Frontend**: `http://localhost:8000/api/ui`
-- **API**: `http://localhost:8000/api/describe`
+- **API**: `http://localhost:8000/api/chat`
 
 ### Option 2: Local Development
 
@@ -110,10 +111,17 @@ Open your browser and go to: `http://localhost:8000/api/ui`
 1. **Image Captioning**:
    - Click on "Image Caption" tab
    - Upload an image file
+   - Add an optional prompt or leave blank for default description
    - Click "Generate Caption"
    - View the AI-generated description
 
-2. **Image Generation**:
+2. **Chat with Images**:
+   - Click on "Chat" tab
+   - Upload an image and/or enter a message
+   - Have a conversation about the image with the AI
+   - Ask questions or request analysis of the image content
+
+3. **Image Generation**:
    - Click on "Generate Image" tab
    - Enter a text description (e.g., "A beautiful sunset over mountains")
    - Click "Generate Image"
@@ -123,14 +131,38 @@ Open your browser and go to: `http://localhost:8000/api/ui`
 
 #### Image Captioning
 ```bash
-curl -X POST -F image=@your_image.jpg http://localhost:8000/api/describe
+curl -X POST -F image=@your_image.jpg -F prompt="Describe this image in detail" http://localhost:8000/api/chat
 ```
 
 Response:
 ```json
 {
-  "description": "A beautiful landscape with mountains and trees",
-  "source": "blip"
+  "description": "A beautiful landscape with mountains and trees under a clear blue sky",
+  "prompt": "Describe this image in detail",
+  "image": "data:image/jpeg;base64,...",
+  "source": "rhino-light"
+}
+```
+
+#### Chat with Images
+```bash
+curl -X POST -F image=@your_image.jpg -F message="What colors do you see in this image?" http://localhost:8000/api/chat
+```
+
+Or chat without image:
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"message": "Hello, how are you?"}' \
+  http://localhost:8000/api/chat
+```
+
+Response:
+```json
+{
+  "reply": "I can see vibrant greens, blues, and earthy browns in this natural landscape scene.",
+  "message": "What colors do you see in this image?",
+  "image": "data:image/jpeg;base64,...",
+  "source": "rhino-light"
 }
 ```
 
@@ -154,12 +186,14 @@ Response:
 
 ### Models Used
 
-1. **Image Captioning**:
-   - Primary: vLLM with rhino(if available)
-   - Fallback: BLIP (Salesforce/blip-image-captioning-base)
+1. **Vision and Chat (Rhino Light API)**:
+   - Primary: Rhino vision model via vLLM OpenAI-compatible API
+   - Supports both image captioning and conversational AI with vision
+   - Hosted at: `https://rhino-light-api.ssl.qom.ac.ir`
 
 2. **Image Generation**:
    - Stable Diffusion v1.5 (runwayml/stable-diffusion-v1-5)
+   - CPU-optimized for local generation
 
 ### Project Structure
 
@@ -185,46 +219,46 @@ Image_processing_uni_project/
 
 ### Environment Variables
 
-To use the vLLM platform, you must configure the vLLM model and related settings in the .env file. Create a .env file in the project root and add the following variables:
+Create a `.env` file in the project root and configure the Rhino Light API settings:
 
 ```bash
-# vLLM Configuration
-HUGGING_FACE_HUB_TOKEN=your_hugging_face_token
-VLLM_BASE_URL=your_server_ip_or_url
-VLLM_API_KEY=your_vllm_api_key
-VLLM_MODEL=rhino
+# Rhino Light API Configuration
+RHINO_LIGHT_BASE_URL=https://rhino-light-api.ssl.qom.ac.ir
+RHINO_LIGHT_TOKEN=default
+RHINO_LIGHT_MODEL=rhino
 
-
-
+# Image processing settings
+RHINO_MAX_IMAGE_SIDE=1024
+RHINO_JPEG_QUALITY=80
 ```
-Replace your_hugging_face_token, your_server_ip_or_url, your_vllm_api_key, your_rhino_server_ip_or_url, your_rhino_api_key, and your_rhino_model with the appropriate values for your setup. The HUGGING_FACE_HUB_TOKEN is required for accessing models from Hugging Face, and VLLM_MODEL specifies the model to use with vLLM (e.g., rhino).
 
-### vLLM Server (Optional)
+### Available Environment Variables
 
-If you want to use vLLM for better performance:
+- `RHINO_LIGHT_BASE_URL`: URL of the Rhino Light API server (default: `https://rhino-light-api.ssl.qom.ac.ir`)
+- `RHINO_LIGHT_TOKEN`: API authentication token (default: `default`)
+- `RHINO_LIGHT_MODEL`: Model name to use (default: `rhino`)
+- `RHINO_MAX_IMAGE_SIDE`: Maximum image dimension for processing (default: `1024`)
+- `RHINO_JPEG_QUALITY`: JPEG compression quality for image uploads (default: `80`)
 
-```bash
-# Pull vLLM Docker image
-docker pull vllm/vllm-openai:latest
+### Rhino Light API
 
-# Run vLLM server (CPU mode)
-docker run -d --name vllm-openai-cpu \
-  -p 8000:8000 \
-  -e VLLM_TARGET_DEVICE=cpu \
-  -e VLLM_LOGGING_LEVEL=DEBUG \
-  vllm/vllm-openai:latest \
-  --host 0.0.0.0 --port 8000 --device cpu \
-  --enable-vision \
-  --model Qwen/Qwen2-VL-2B-Instruct
-```
+The application uses the Rhino Light API, which is a vLLM-based vision model service hosted at Qom University. This service provides:
+
+- Vision-language understanding
+- Image captioning capabilities
+- Conversational AI with image context
+- OpenAI-compatible API interface
+
+The API is pre-configured and ready to use. No additional server setup is required.
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **"Connection refused" error**:
-   - The vLLM server is not running or not accessible
-   - The app will automatically fall back to BLIP for captioning
+1. **"Connection refused" or API errors**:
+   - Check if the Rhino Light API is accessible
+   - Verify your internet connection
+   - Ensure RHINO_LIGHT_BASE_URL is correct
 
 2. **Slow image generation**:
    - Image generation on CPU is slower than GPU
@@ -232,11 +266,11 @@ docker run -d --name vllm-openai-cpu \
 
 3. **Out of memory errors**:
    - Close other applications to free up RAM
-   - The models require significant memory for first-time loading
+   - Stable Diffusion requires significant memory for image generation
 
-4. **Model download issues**:
-   - Ensure stable internet connection
-   - Models are downloaded on first use (~2-4GB total)
+4. **Image upload issues**:
+   - Ensure images are under the maximum size limit (RHINO_MAX_IMAGE_SIDE)
+   - Supported formats: JPEG, PNG (automatically converted)
 
 ### Performance Tips
 
@@ -330,8 +364,8 @@ docker-compose up -d
 python manage.py test
 
 # Test API endpoints
-curl -X POST -F image=@test_image.jpg http://localhost:8000/api/describe
-curl -X POST -H "Content-Type: application/json" -d '{"prompt":"test"}' http://localhost:8000/api/generate
+curl -X POST -F image=@test_image.jpg -F message="What do you see?" http://localhost:8000/api/chat
+curl -X POST -H "Content-Type: application/json" -d '{"prompt":"A sunset"}' http://localhost:8000/api/generate
 
 # Test with Docker
 docker-compose exec web python manage.py test
@@ -348,7 +382,7 @@ This is a university project. For questions or issues, please contact the projec
 ## Acknowledgments
 
 - Django framework
-- Hugging Face Transformers
-- Stable Diffusion
-- BLIP model
+- Rhino Light API (Qom University)
 - vLLM platform
+- Stable Diffusion
+- OpenAI API specification

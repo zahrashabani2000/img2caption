@@ -12,37 +12,43 @@
     </style>
 </head>
 <body>
-    <h1>Image Describe Chat</h1>
+    <h1>Chat with Image</h1>
 
-    <form id="describeForm">
-        <label for="prompt">Text Prompt (optional):</label>
-        <textarea id="prompt" rows="3"></textarea>
+    <div id="chatBox" class="result" style="height: 300px; overflow:auto;"></div>
 
-        <label for="image">Upload Image (optional):</label>
+    <form id="chatForm">
+        <label for="message">Message</label>
+        <textarea id="message" rows="3" placeholder="Type your message..."></textarea>
+
+        <label for="image">Attach Image (optional)</label>
         <input type="file" id="image" accept="image/*">
 
         <button type="submit">Send</button>
     </form>
 
-    <div class="result" id="result"></div>
-
     <script>
-        const form = document.getElementById("describeForm");
-        const resultDiv = document.getElementById("result");
+        const form = document.getElementById("chatForm");
+        const chatBox = document.getElementById("chatBox");
 
         form.addEventListener("submit", async (e) => {
             e.preventDefault();
-            resultDiv.innerHTML = "Processing...";
-
-            const prompt = document.getElementById("prompt").value.trim();
+            const message = document.getElementById("message").value.trim();
             const imageFile = document.getElementById("image").files[0];
 
             const formData = new FormData();
-            if (prompt) formData.append("prompt", prompt);
+            if (message) formData.append("message", message);
             if (imageFile) formData.append("image", imageFile);
 
             try {
-                const response = await fetch("/api/describe", {
+                // Append user message to chat immediately
+                if (message) {
+                    chatBox.innerHTML += `<div><strong>You:</strong> ${message}</div>`;
+                } else if (imageFile) {
+                    chatBox.innerHTML += `<div><strong>You:</strong> [Image]</div>`;
+                }
+                chatBox.scrollTop = chatBox.scrollHeight;
+
+                const response = await fetch("/api/chat", {
                     method: "POST",
                     body: formData
                 });
@@ -50,20 +56,18 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    let html = "";
                     if (data.image) {
-                        html += `<img src="${data.image}" alt="Uploaded Image"><br>`;
+                        chatBox.innerHTML += `<div><img src="${data.image}" alt="Uploaded Image"></div>`;
                     }
-                    if (data.blip_caption) {
-                        html += `<strong>BLIP Caption:</strong> ${data.blip_caption}<br>`;
-                    }
-                    html += `<strong>RHINO Response:</strong> ${data.description}<br>`;
-                    resultDiv.innerHTML = html;
+                    chatBox.innerHTML += `<div><strong>Assistant:</strong> ${data.reply}</div>`;
+                    document.getElementById("message").value = "";
+                    document.getElementById("image").value = "";
+                    chatBox.scrollTop = chatBox.scrollHeight;
                 } else {
-                    resultDiv.innerHTML = `<span style="color:red">Error: ${data.error}</span>`;
+                    chatBox.innerHTML += `<div style="color:red"><strong>Error:</strong> ${data.error}</div>`;
                 }
             } catch (err) {
-                resultDiv.innerHTML = `<span style="color:red">Error: ${err.message}</span>`;
+                chatBox.innerHTML += `<div style="color:red"><strong>Error:</strong> ${err.message}</div>`;
             }
         });
     </script>
