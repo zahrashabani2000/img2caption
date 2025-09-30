@@ -86,6 +86,7 @@ source .venv/bin/activate
 ```bash
 pip install --upgrade pip
 pip install -r requirements.txt
+pip install --no-deps -r requirements.txt #only if you don't want to use generate image
 ```
 
 #### 4. Run Database Migrations
