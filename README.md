@@ -15,9 +15,11 @@ Access at: http://localhost:8000/api/ui
 ## Features
 
 - **Image Captioning**: Upload an image and get an AI-generated description using Rhino vision model
-- **Conversational AI with Vision**: Chat with images using natural language
-- **Web Interface**: Simple, modern UI for easy interaction
-- **API Endpoints**: RESTful API for programmatic access
+- **Conversational AI with Vision**: Chat with images using natural language with full conversation history support
+- **Chat Continuity**: Maintain conversation context across multiple messages - AI remembers previous exchanges
+- **Session Management**: Start new conversations or continue existing ones with persistent chat history
+- **Web Interface**: Modern, interactive UI with real-time chat status and conversation controls
+- **API Endpoints**: RESTful API for programmatic access with session-based conversation management
 
 ## System Requirements
 
@@ -113,11 +115,13 @@ Open your browser and go to: `http://localhost:8000/api/ui`
    - Click "Generate Caption"
    - View the AI-generated description
 
-2. **Chat with Images**:
+2. **Conversational Chat with Images**:
    - Click on "Chat" tab
-   - Upload an image and/or enter a message
-   - Have a conversation about the image with the AI
-   - Ask questions or request analysis of the image content
+   - Upload an image and/or enter a message to start a conversation
+   - **Continue the conversation**: Send follow-up messages - the AI remembers the entire conversation history
+   - **Conversation status**: See real-time indicators showing if you're continuing a conversation
+   - **Start fresh**: Click the "New Chat" button to clear conversation history and begin a new discussion
+   - Ask questions, request analysis, or discuss multiple aspects of the image - context is maintained across all messages
 
 ### API Endpoints
 
@@ -154,9 +158,39 @@ Response:
   "reply": "I can see vibrant greens, blues, and earthy browns in this natural landscape scene.",
   "message": "What colors do you see in this image?",
   "image": "data:image/jpeg;base64,...",
-  "source": "rhino-light"
+  "source": "rhino-light",
+  "conversation_continued": false
 }
 ```
+
+#### Start New Chat Session
+```bash
+curl -X POST http://localhost:8000/api/new_chat
+```
+
+Response:
+```json
+{
+  "message": "New chat started"
+}
+```
+
+This endpoint clears the conversation history and allows you to start a fresh conversation.
+
+### Conversation History Management
+
+The application maintains conversation context using Django's session framework:
+
+- **Session Storage**: Conversation history is stored server-side and linked to each user's browser session
+- **Message Persistence**: All user messages and AI responses are saved and sent to the AI for context
+- **Context Awareness**: The AI receives full conversation history with each request, enabling coherent multi-turn conversations
+- **Session Isolation**: Each user has their own separate conversation history
+- **Memory Management**: Conversations persist across page refreshes but can be cleared with the "New Chat" button
+
+**Technical Details**:
+- Messages are stored in OpenAI-compatible format with `role` and `content` fields
+- First message starts a new conversation; subsequent messages include full history
+- System messages are automatically added to inform the AI about conversation continuity
 
 ## Architecture
 
@@ -172,20 +206,28 @@ Response:
 ```
 Image_processing_uni_project/
 ├── caption/                 # Django app
-│   ├── views.py            # API endpoints
-│   ├── urls.py             # URL routing
+│   ├── views.py            # API endpoints (chat, new_chat)
+│   ├── urls.py             # URL routing with session management
 │   └── ...
 ├── visionapp/              # Django project settings
-│   ├── settings.py
-│   ├── urls.py
+│   ├── settings.py         # Session configuration
+│   ├── urls.py             # Main URL configuration
 │   └── ...
 ├── templates/              # HTML templates
 │   └── caption/
-│       └── ui.html         # Main web interface
+│       └── ui.html         # Interactive chat interface with conversation controls
 ├── requirements.txt        # Python dependencies
 ├── manage.py              # Django management
 └── README.md              # This file
 ```
+
+### Key Components for Chat Functionality
+
+- **Session Management**: Django sessions store conversation history per user
+- **Message History**: Persistent storage of user/AI message pairs
+- **Context Preservation**: Full conversation context sent to AI with each request
+- **UI State Management**: Real-time conversation status indicators
+- **New Chat Handler**: Session cleanup and conversation reset functionality
 
 ## Configuration
 
@@ -321,6 +363,8 @@ docker-compose up -d
 1. **New API endpoints**: Add to `caption/views.py` and `caption/urls.py`
 2. **UI changes**: Modify `templates/caption/ui.html`
 3. **New models**: Add loading functions in `caption/views.py`
+4. **Chat enhancements**: Extend conversation management in session handling
+5. **Session features**: Add conversation export, save/load functionality, or multi-user chat rooms
 
 ### Testing
 
@@ -328,12 +372,27 @@ docker-compose up -d
 # Run Django tests
 python manage.py test
 
-# Test API endpoints
+# Test chat API endpoints
 curl -X POST -F image=@test_image.jpg -F message="What do you see?" http://localhost:8000/api/chat
+
+# Test conversation continuity (send follow-up messages)
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"message": "Can you describe the colors in more detail?"}' \
+  -H "Cookie: sessionid=YOUR_SESSION_ID" \
+  http://localhost:8000/api/chat
+
+# Test new chat functionality
+curl -X POST http://localhost:8000/api/new_chat
 
 # Test with Docker
 docker-compose exec web python manage.py test
 ```
+
+**Chat Testing Tips**:
+- Use browser developer tools to inspect session cookies
+- Test conversation persistence across multiple requests
+- Verify `conversation_continued` field in API responses
+- Test "New Chat" button clears conversation history
 
 ## License
 
@@ -345,7 +404,8 @@ This is a university project. For questions or issues, please contact the projec
 
 ## Acknowledgments
 
-- Django framework
+- Django framework and session management
 - Rhino Light API (Qom University)
-- vLLM platform
-- OpenAI API specification
+- vLLM platform for vision-language models
+- OpenAI API specification for chat completions
+- Conversation history and context management implementation
