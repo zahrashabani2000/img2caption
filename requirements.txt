@@ -4,7 +4,6 @@ anyio==4.10.0
 asgiref==3.9.1
 certifi==2025.8.3
 charset-normalizer==3.4.3
-diffusers==0.30.2
 distro==1.9.0
 Django==5.2.6
 filelock==3.13.1

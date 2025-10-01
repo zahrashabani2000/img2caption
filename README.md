@@ -1,6 +1,6 @@
 # AI Image Processing University Project
 
-A Django web application that provides AI-powered image processing capabilities including image captioning, text-to-image generation, and conversational AI with vision. Built for Computer Engineering Bachelor's degree project using Rhino Light API (vLLM-based) and CPU-compatible models.
+A Django web application that provides AI-powered image processing capabilities including image captioning and conversational AI with vision. Built for Computer Engineering Bachelor's degree project using Rhino Light API (vLLM-based).
 
 ## 🚀 Quick Docker Setup
 
@@ -16,8 +16,6 @@ Access at: http://localhost:8000/api/ui
 
 - **Image Captioning**: Upload an image and get an AI-generated description using Rhino vision model
 - **Conversational AI with Vision**: Chat with images using natural language
-- **Text-to-Image Generation**: Describe what you want and generate an image using Stable Diffusion
-- **CPU-Optimized**: Works on CPU-only systems using efficient models
 - **Web Interface**: Simple, modern UI for easy interaction
 - **API Endpoints**: RESTful API for programmatic access
 
@@ -86,7 +84,6 @@ source .venv/bin/activate
 ```bash
 pip install --upgrade pip
 pip install -r requirements.txt
-pip install --no-deps -r requirements.txt #only if you don't want to use generate image
 ```
 
 #### 4. Run Database Migrations
@@ -121,12 +118,6 @@ Open your browser and go to: `http://localhost:8000/api/ui`
    - Upload an image and/or enter a message
    - Have a conversation about the image with the AI
    - Ask questions or request analysis of the image content
-
-3. **Image Generation**:
-   - Click on "Generate Image" tab
-   - Enter a text description (e.g., "A beautiful sunset over mountains")
-   - Click "Generate Image"
-   - Wait for the AI to create the image
 
 ### API Endpoints
 
@@ -167,22 +158,6 @@ Response:
 }
 ```
 
-#### Image Generation
-```bash
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"prompt": "A cat sitting on a windowsill"}' \
-  http://localhost:8000/api/generate
-```
-
-Response:
-```json
-{
-  "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
-  "prompt": "A cat sitting on a windowsill",
-  "source": "stable-diffusion"
-}
-```
-
 ## Architecture
 
 ### Models Used
@@ -191,10 +166,6 @@ Response:
    - Primary: Rhino vision model via vLLM OpenAI-compatible API
    - Supports both image captioning and conversational AI with vision
    - Hosted at: `https://rhino-light-api.ssl.qom.ac.ir`
-
-2. **Image Generation**:
-   - Stable Diffusion v1.5 (runwayml/stable-diffusion-v1-5)
-   - CPU-optimized for local generation
 
 ### Project Structure
 
@@ -261,13 +232,6 @@ The API is pre-configured and ready to use. No additional server setup is requir
    - Verify your internet connection
    - Ensure RHINO_LIGHT_BASE_URL is correct
 
-2. **Slow image generation**:
-   - Image generation on CPU is slower than GPU
-   - Consider reducing image size or inference steps in the code
-
-3. **Out of memory errors**:
-   - Close other applications to free up RAM
-   - Stable Diffusion requires significant memory for image generation
 
 4. **Image upload issues**:
    - Ensure images are under the maximum size limit (RHINO_MAX_IMAGE_SIDE)
@@ -366,7 +330,6 @@ python manage.py test
 
 # Test API endpoints
 curl -X POST -F image=@test_image.jpg -F message="What do you see?" http://localhost:8000/api/chat
-curl -X POST -H "Content-Type: application/json" -d '{"prompt":"A sunset"}' http://localhost:8000/api/generate
 
 # Test with Docker
 docker-compose exec web python manage.py test
@@ -385,5 +348,4 @@ This is a university project. For questions or issues, please contact the projec
 - Django framework
 - Rhino Light API (Qom University)
 - vLLM platform
-- Stable Diffusion
 - OpenAI API specification

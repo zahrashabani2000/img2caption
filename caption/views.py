@@ -16,10 +16,6 @@ load_dotenv()
 
 _blip_lock = threading.Lock()
 
-
-_sd_loaded = False
-_sd_pipeline = None
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -146,63 +142,3 @@ def chat(request):
 
 def ui(request):
     return render(request, "caption/ui.html")
-#-------------------------------------------------------------------------------------------------
-def _load_sd_if_needed():
-    global _sd_loaded, _sd_pipeline
-    if _sd_loaded:
-        return
-    with _blip_lock:  # Reuse lock
-        if _sd_loaded:
-            return
-        from diffusers import StableDiffusionPipeline
-        import torch
-        _sd_pipeline = StableDiffusionPipeline.from_pretrained(
-            "runwayml/stable-diffusion-v1-5",
-            torch_dtype=torch.float32,
-            safety_checker=None,
-            requires_safety_checker=False,
-        )
-        _sd_pipeline = _sd_pipeline.to("cpu")
-        _sd_loaded = True
-
-def _generate_image_with_sd(prompt: str) -> Image.Image:
-    _load_sd_if_needed()
-    import torch
-    with torch.no_grad():
-        result = _sd_pipeline(
-            prompt,
-            num_inference_steps=20,  # Fewer steps for faster CPU generation
-            guidance_scale=7.5,
-            width=512,
-            height=512,
-        )
-    return result.images[0]
-
-@csrf_exempt
-def generate_image(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "POST with 'prompt' field"}, status=405)
-
-    data = request.json if hasattr(request, 'json') else {}
-    if not data:
-        try:
-            data = json.loads(request.body.decode('utf-8'))
-        except:
-            return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-    prompt = data.get("prompt", "").strip()
-    if not prompt:
-        return JsonResponse({"error": "Missing prompt"}, status=400)
-
-    try:
-        image = _generate_image_with_sd(prompt)
-        buffer = io.BytesIO()
-        image.save(buffer, format="PNG")
-        b64_image = base64.b64encode(buffer.getvalue()).decode("utf-8")
-        return JsonResponse({
-            "image": f"data:image/png;base64,{b64_image}",
-            "prompt": prompt,
-            "source": "stable-diffusion"
-        })
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
