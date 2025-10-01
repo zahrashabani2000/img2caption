@@ -14,6 +14,11 @@
 <body>
     <h1>Chat with Image</h1>
 
+    <div style="margin-bottom: 10px;">
+        <button id="newChatBtn" style="background-color: #f44336; color: white; border: none; padding: 8px 16px; cursor: pointer; margin-right: 10px;">New Chat</button>
+        <span id="conversationStatus">Starting new conversation...</span>
+    </div>
+
     <div id="chatBox" class="result" style="height: 300px; overflow:auto;"></div>
 
     <form id="chatForm">
@@ -29,6 +34,32 @@
     <script>
         const form = document.getElementById("chatForm");
         const chatBox = document.getElementById("chatBox");
+        const conversationStatus = document.getElementById("conversationStatus");
+        const newChatBtn = document.getElementById("newChatBtn");
+
+        let messageCount = 0;
+
+        // New Chat button functionality
+        newChatBtn.addEventListener("click", async () => {
+            try {
+                const response = await fetch("/api/new_chat", {
+                    method: "POST"
+                });
+
+                if (response.ok) {
+                    chatBox.innerHTML = "";
+                    conversationStatus.textContent = "Starting new conversation...";
+                    messageCount = 0;
+                    document.getElementById("message").value = "";
+                    document.getElementById("image").value = "";
+                } else {
+                    const data = await response.json();
+                    alert("Error starting new chat: " + data.error);
+                }
+            } catch (err) {
+                alert("Error starting new chat: " + err.message);
+            }
+        });
 
         form.addEventListener("submit", async (e) => {
             e.preventDefault();
@@ -40,6 +71,7 @@
             if (imageFile) formData.append("image", imageFile);
 
             try {
+                messageCount++;
                 // Append user message to chat immediately
                 if (message) {
                     chatBox.innerHTML += `<div><strong>You:</strong> ${message}</div>`;
@@ -60,6 +92,16 @@
                         chatBox.innerHTML += `<div><img src="${data.image}" alt="Uploaded Image"></div>`;
                     }
                     chatBox.innerHTML += `<div><strong>Assistant:</strong> ${data.reply}</div>`;
+
+                    // Update conversation status
+                    if (data.conversation_continued) {
+                        conversationStatus.textContent = `Continuing conversation (${messageCount} messages)...`;
+                        conversationStatus.style.color = "#2196F3"; // Blue for continuing
+                    } else {
+                        conversationStatus.textContent = "New conversation started...";
+                        conversationStatus.style.color = "#4CAF50"; // Green for new
+                    }
+
                     document.getElementById("message").value = "";
                     document.getElementById("image").value = "";
                     chatBox.scrollTop = chatBox.scrollHeight;

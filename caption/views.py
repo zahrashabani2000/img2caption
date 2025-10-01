@@ -48,6 +48,8 @@ def chat(request):
         return JsonResponse({"error": "Use POST"}, status=405)
 
     try:
+        conversation_history = request.session.get('conversation_history', [])
+
         # Support multipart form (message + image)
         message = ""
         image_file = None
@@ -95,7 +97,7 @@ def chat(request):
         if not message and not image_file and not (locals().get("image_b64_str")):
             return JsonResponse({"error": "Missing message or image"}, status=400)
 
-        # Build request payload to Rhino Light API exactly like provided curl
+        # Build request payload to Rhino Light API with conversation history
         content_parts = []
         if message or not locals().get("image_b64_str"):
             content_parts.append({
@@ -110,12 +112,23 @@ def chat(request):
                 }
             })
 
-        messages = [
-            {
-                "role": "user",
-                "content": content_parts,
+        # Add the new user message to conversation history
+        user_message = {
+            "role": "user",
+            "content": content_parts,
+        }
+        conversation_history.append(user_message)
+
+        # Prepare messages for API call - include conversation history
+        messages = conversation_history.copy()
+
+        # Add a system message to let AI know this is a continuing conversation
+        if len(conversation_history) > 1:
+            system_message = {
+                "role": "system",
+                "content": "This is a continuing conversation. Previous messages are provided for context. The user is asking you to continue the discussion."
             }
-        ]
+            messages.insert(0, system_message)
 
         result = _call_rhino_light(messages)
 
@@ -130,14 +143,40 @@ def chat(request):
             .get("content", "No response")
         )
 
+        # Add AI response to conversation history
+        assistant_message = {
+            "role": "assistant",
+            "content": assistant_text
+        }
+        conversation_history.append(assistant_message)
+
+        # Save updated conversation history to session
+        request.session['conversation_history'] = conversation_history
+
         return JsonResponse({
             "reply": assistant_text,
             "message": message,
             "image": data_url,
-            "source": "rhino-light"
+            "source": "rhino-light",
+            "conversation_continued": len(conversation_history) > 2  # True if this isn't the first exchange
         })
     except Exception as e:
         logger.error(f"Unexpected error in chat: {e}")
+        return JsonResponse({"error": f"Internal server error: {str(e)}"}, status=500)
+
+@csrf_exempt
+def new_chat(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Use POST"}, status=405)
+
+    try:
+        # Clear conversation history from session
+        if 'conversation_history' in request.session:
+            del request.session['conversation_history']
+
+        return JsonResponse({"message": "New chat started"})
+    except Exception as e:
+        logger.error(f"Unexpected error in new_chat: {e}")
         return JsonResponse({"error": f"Internal server error: {str(e)}"}, status=500)
 
 def ui(request):
